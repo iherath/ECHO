@@ -12,8 +12,8 @@ parser.add_argument("--device", type=str, default="gpu", help="Device to use for
 parser.add_argument("--conv_layer", type=str)
 parser.add_argument("--num_layers", type=int, help="Number of layers in the GNN")
 parser.add_argument("--hidden_dim", type=int, help="Hidden dimension of the GNN")
-parser.add_argument("--lr", type=float, help="Learning rate for the optimizer")
-parser.add_argument("--weight_decay", type=float, help="Weight decay for the optimizer")
+parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate for the optimizer")
+parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay for the optimizer")
 parser.add_argument("--batch_size", type=int, default=256, help="Batch size for the DataLoader")
 parser.add_argument("--gnn_type", type=str)
 
