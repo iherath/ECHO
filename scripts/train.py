@@ -36,8 +36,9 @@ parser.add_argument("--alpha", type=float, help="Alpha for the GCN2 model")
 
 # gssm specific parameters
 parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension M for GSSM")
+parser.add_argument("--num_steps", type=int, default=40, help="Fixed recurrence steps per GSSMLayer (replaces convergence-gating)")
 parser.add_argument("--selective", action="store_true", help="Use input-dependent B in GSSMLayer (Mamba-style selectivity)")
-parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer convergence step counts")
+parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer step counts")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
 
 # phdgn specific parameters

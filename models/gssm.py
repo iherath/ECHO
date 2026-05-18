@@ -40,8 +40,7 @@ class GSSM(nn.Module):
         num_layers: int = 4,
         node_level_task: bool = False,
         d_state: int = 16,
-        tol: float = 1e-5,
-        max_steps: int = 500,
+        num_steps: int = 40,
         **kwargs,
     ):
         super().__init__()
@@ -63,8 +62,7 @@ class GSSM(nn.Module):
             num_tasks=output_dim,                            # 1 for regression
             task_type="node" if node_level_task else "graph",
             d_edge=d_edge,
-            tol=tol,
-            max_steps=max_steps,
+            num_steps=num_steps,
             selective=selective,
         )
 
