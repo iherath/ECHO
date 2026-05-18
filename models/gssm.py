@@ -47,8 +47,13 @@ class GSSM(nn.Module):
         super().__init__()
 
         # ECHO-Chem passes edge_attr with dim=2; Synth has no edge features
-        d_edge     = kwargs.get("d_edge",     None)
-        selective  = kwargs.get("selective",  False)
+        d_edge     = kwargs.get("d_edge",          None)
+        selective  = kwargs.get("selective",       False)
+        conv_log   = kwargs.get("convergence_log", None)
+
+        if conv_log:
+            from gssm_layer import GSSMLayer
+            GSSMLayer.configure_logging(conv_log)
 
         self.model = FullGSSMModel(
             d_input=input_dim,                               # (N, input_dim)

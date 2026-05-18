@@ -37,6 +37,7 @@ parser.add_argument("--alpha", type=float, help="Alpha for the GCN2 model")
 # gssm specific parameters
 parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension M for GSSM")
 parser.add_argument("--selective", action="store_true", help="Use input-dependent B in GSSMLayer (Mamba-style selectivity)")
+parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer convergence step counts")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
 
 # phdgn specific parameters
@@ -134,6 +135,13 @@ def train(seed, config):
     )
 
     trainer.fit(model, train_loader, val_loader)
+
+    if config.convergence_log and config.gnn_type == "GSSM":
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "../../Graph-SSM"))
+        from gssm_layer import GSSMLayer
+        GSSMLayer.flush_log()
+
     best_epoch = get_epoch(trainer.checkpoint_callback.best_model_path) #type: ignore
     print(f"Best epoch: {best_epoch}")
     print("Best checkpoint path: ", trainer.checkpoint_callback.best_model_path) #type: ignore
