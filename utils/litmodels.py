@@ -7,6 +7,7 @@ from models.drew_delay import DRew_GCN
 from models.graphcon import GraphCON
 from models.phdgn import PHDGN
 from models.swan import SWAN
+from models.gssm import GSSM
 import time
 import csv
 import pathlib
@@ -21,6 +22,7 @@ models_map = {
     "GraphCON": GraphCON,
     "PHDGN": PHDGN,
     "SWAN": SWAN,
+    "GSSM": GSSM,
 }
 
 def convert_to_lit_dataset(data):

@@ -34,6 +34,10 @@ parser.add_argument("--constant_feature", type=float, help="Constant feature")
 # gcn2 params
 parser.add_argument("--alpha", type=float, help="Alpha for the GCN2 model")
 
+# gssm specific parameters
+parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension M for GSSM")
+parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+
 # phdgn specific parameters
 parser.add_argument("--beta", type=float, help="Beta parameter for the PHDGN model")
 parser.add_argument("--p_conv_mode", type=str, choices=["naive", "gcn"], help="P convolution mode for the PhDGN model")
@@ -49,6 +53,7 @@ from torch_geometric.loader import DataLoader
 import torch
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 
 import os
 from utils import get_dataset, KHopTransform
@@ -108,11 +113,15 @@ def train(seed, config):
     model = LitGraphNN(
         input_dim=num_feat,
         output_dim=num_class,
-        node_level_task=False if task == "diam" else True,
+        node_level_task=task not in ("diam", "energy"),  # graph-level tasks
         scaling_factor=scaling_factor,
         **hp_conf,
     )
 
+    logger = (
+        WandbLogger(project="ECHO-GSSM", name=f"{task}-{config.gnn_type}")
+        if config.wandb else True  # True = Lightning's default CSVLogger
+    )
     trainer = L.Trainer(
         max_epochs=1000,
         accelerator="gpu",
@@ -120,6 +129,7 @@ def train(seed, config):
             EarlyStopping(monitor="val_loss", patience=100),
             ModelCheckpoint(monitor="val_loss", save_top_k=1),
         ],
+        logger=logger,
     )
 
     trainer.fit(model, train_loader, val_loader)
@@ -157,5 +167,13 @@ if __name__ == "__main__":
         config=args,
     )
 
-    print("Metrics: ", metrics)
-    
+    print("\n" + "=" * 40)
+    print(f"  Task : {args.task.upper()}   Model : {args.gnn_type}")
+    print("=" * 40)
+    print(f"  val   MAE : {metrics['val_mae']:.6f}")
+    print(f"  val   MSE : {metrics['val_mse']:.6f}")
+    print(f"  test  MAE : {metrics['test_mae']:.6f}")
+    print(f"  test  MSE : {metrics['test_mse']:.6f}")
+    print(f"  best epoch: {metrics['best_epoch']}")
+    print("=" * 40 + "\n")
+
