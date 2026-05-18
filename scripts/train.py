@@ -36,6 +36,7 @@ parser.add_argument("--alpha", type=float, help="Alpha for the GCN2 model")
 
 # gssm specific parameters
 parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension M for GSSM")
+parser.add_argument("--selective", action="store_true", help="Use input-dependent B in GSSMLayer (Mamba-style selectivity)")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
 
 # phdgn specific parameters

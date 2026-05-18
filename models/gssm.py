@@ -47,7 +47,8 @@ class GSSM(nn.Module):
         super().__init__()
 
         # ECHO-Chem passes edge_attr with dim=2; Synth has no edge features
-        d_edge = kwargs.get("d_edge", None)
+        d_edge     = kwargs.get("d_edge",     None)
+        selective  = kwargs.get("selective",  False)
 
         self.model = FullGSSMModel(
             d_input=input_dim,                               # (N, input_dim)
@@ -59,6 +60,7 @@ class GSSM(nn.Module):
             d_edge=d_edge,
             tol=tol,
             max_steps=max_steps,
+            selective=selective,
         )
 
     def forward(self, data):                                 # data: PyG Data/Batch
