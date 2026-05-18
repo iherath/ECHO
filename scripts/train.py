@@ -39,6 +39,7 @@ parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension
 parser.add_argument("--num_steps", type=int, default=40, help="Fixed recurrence steps per GSSMLayer (replaces convergence-gating)")
 parser.add_argument("--selective", action="store_true", help="Use input-dependent B in GSSMLayer (Mamba-style selectivity)")
 parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer step counts")
+parser.add_argument("--diversity_plot_dir", type=str, default=None, help="Directory to save per-step node diversity plots every 10 epochs (GSSM only)")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
 
 # phdgn specific parameters
@@ -60,7 +61,7 @@ from lightning.pytorch.loggers import WandbLogger
 
 import os
 from utils import get_dataset, KHopTransform
-from utils.litmodels import LitGraphNN
+from utils.litmodels import LitGraphNN, DiversityPlotCallback
 import re
 
 
@@ -125,13 +126,17 @@ def train(seed, config):
         WandbLogger(project="ECHO-GSSM", name=f"{task}-{config.gnn_type}")
         if config.wandb else True  # True = Lightning's default CSVLogger
     )
+    callbacks = [
+        EarlyStopping(monitor="val_loss", patience=100),
+        ModelCheckpoint(monitor="val_loss", save_top_k=1),
+    ]
+    if config.diversity_plot_dir and config.gnn_type == "GSSM":
+        callbacks.append(DiversityPlotCallback(config.diversity_plot_dir))
+
     trainer = L.Trainer(
         max_epochs=1000,
         accelerator="gpu",
-        callbacks=[
-            EarlyStopping(monitor="val_loss", patience=100),
-            ModelCheckpoint(monitor="val_loss", save_top_k=1),
-        ],
+        callbacks=callbacks,
         logger=logger,
     )
 

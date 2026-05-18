@@ -15,6 +15,59 @@ import pathlib
 from typing import Optional
 
 
+class DiversityPlotCallback(L.Callback):
+    """Every `every_n_epochs`, plots per-step node-rep diversity for one training batch."""
+
+    def __init__(self, plot_dir: str, every_n_epochs: int = 10):
+        self.plot_dir = pathlib.Path(plot_dir)
+        self.plot_dir.mkdir(parents=True, exist_ok=True)
+        self._capturing = False
+
+        self.every_n_epochs = every_n_epochs
+
+    def _gssm_layer(self):
+        try:
+            from gssm_layer import GSSMLayer
+            return GSSMLayer
+        except ImportError:
+            return None
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        if trainer.current_epoch % self.every_n_epochs == 0:
+            cls = self._gssm_layer()
+            if cls is not None:
+                cls.enable_diversity_tracking()
+                self._capturing = True
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if self._capturing and batch_idx == 0:
+            cls = self._gssm_layer()
+            if cls is not None:
+                cls.disable_diversity_tracking()
+                self._capturing = False
+                diversities = cls.get_diversity_data()
+                if diversities:
+                    self._plot(trainer.current_epoch, diversities)
+
+    def _plot(self, epoch: int, diversities: list):
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            print("[DiversityPlot] matplotlib not available — skipping plot")
+            return
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.plot(range(len(diversities)), diversities, marker="o", markersize=3, linewidth=1.5)
+        ax.set_xlabel("Recurrence step")
+        ax.set_ylabel("Node rep std (diversity)")
+        ax.set_title(f"Node representation diversity across steps — epoch {epoch}")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        path = self.plot_dir / f"diversity_epoch_{epoch:04d}.png"
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+        print(f"[DiversityPlot] saved → {path}")
+
+
 models_map = {
     "GNN": GNN,
     "ADGN": ADGN,
