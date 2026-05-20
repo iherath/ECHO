@@ -136,6 +136,7 @@ def train(seed, config):
     trainer = L.Trainer(
         max_epochs=1000,
         accelerator="gpu",
+        gradient_clip_val=1.0,
         callbacks=callbacks,
         logger=logger,
     )
