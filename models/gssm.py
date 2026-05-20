@@ -48,6 +48,7 @@ class GSSM(nn.Module):
         # ECHO-Chem passes edge_attr with dim=2; Synth has no edge features
         d_edge     = kwargs.get("d_edge",          None)
         selective  = kwargs.get("selective",       False)
+        dropout    = kwargs.get("dropout",         0.0)
         conv_log   = kwargs.get("convergence_log", None)
 
         if conv_log:
@@ -64,6 +65,7 @@ class GSSM(nn.Module):
             d_edge=d_edge,
             num_steps=num_steps,
             selective=selective,
+            dropout=dropout,
         )
 
     def forward(self, data):                                 # data: PyG Data/Batch
