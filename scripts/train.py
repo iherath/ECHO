@@ -4,6 +4,18 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
+
+
+def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected for --selective.')
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, help="Task to run: [sssp, ecc, diam, chem]",)
 
@@ -37,7 +49,7 @@ parser.add_argument("--alpha", type=float, help="Alpha for the GCN2 model")
 # gssm specific parameters
 parser.add_argument("--d_state", type=int, default=16, help="SSM state dimension M for GSSM")
 parser.add_argument("--num_steps", type=int, default=40, help="Fixed recurrence steps per GSSMLayer (replaces convergence-gating)")
-parser.add_argument("--selective", action="store_true", help="Use input-dependent B in GSSMLayer (Mamba-style selectivity)")
+parser.add_argument("--selective", type=str2bool, nargs='?', const=True, default=False, help="Use selective GSSMLayer (Mamba-style selectivity) [True|False]")
 parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate in FFN layers (GSSM only)")
 parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer step counts")
 parser.add_argument("--diversity_plot_dir", type=str, default=None, help="Directory to save per-step node diversity plots every 10 epochs (GSSM only)")
@@ -193,4 +205,3 @@ if __name__ == "__main__":
     print(f"  test  MSE : {metrics['test_mse']:.6f}")
     print(f"  best epoch: {metrics['best_epoch']}")
     print("=" * 40 + "\n")
-
