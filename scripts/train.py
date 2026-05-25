@@ -117,13 +117,13 @@ def train(seed, config):
     print(f"Scaling factor: {scaling_factor}")
 
     train_loader = DataLoader(
-        data_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True
+        data_train, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True
     )
     val_loader = DataLoader(
-        data_val, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True
+        data_val, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
     )
     test_loader = DataLoader(
-        data_test, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True
+        data_test, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
     )
 
 
