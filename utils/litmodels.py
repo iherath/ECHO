@@ -8,6 +8,7 @@ from models.graphcon import GraphCON
 from models.phdgn import PHDGN
 from models.swan import SWAN
 from models.gssm import GSSM
+from models.glgsm import GenLGSM
 import time
 import csv
 import pathlib
@@ -76,6 +77,7 @@ models_map = {
     "PHDGN": PHDGN,
     "SWAN": SWAN,
     "GSSM": GSSM,
+    "GenLGSM": GenLGSM,
 }
 
 def convert_to_lit_dataset(data):

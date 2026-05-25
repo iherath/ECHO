@@ -1,0 +1,52 @@
+"""
+ECHO adapter for GenLGSMModel (PyG sparse batch, no cross-graph padding).
+
+kwargs:
+    glgsm_mode : option1 | option2 | path_b | lgsm_adj | lgsm_nbt
+    num_layers : processing depth (default 4)
+    num_steps  : sequence length L (default 40)
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../Graph-SSM"))
+
+import torch.nn as nn
+
+from glgsm_model import GenLGSMModel
+
+
+class GenLGSM(nn.Module):
+    """ECHO wrapper — same forward contract as GSSM (sparse x, edge_index, batch)."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        hidden_dim: int = 64,
+        num_layers: int = 4,
+        node_level_task: bool = False,
+        d_state: int = 16,
+        num_steps: int = 40,
+        **kwargs,
+    ):
+        super().__init__()
+        mode = kwargs.get('glgsm_mode', 'option1')
+        dropout = kwargs.get('dropout', 0.0)
+
+        self.model = GenLGSMModel(
+            in_dim=input_dim,
+            d_model=hidden_dim,
+            d_state=d_state,
+            out_dim=output_dim,
+            max_hops=num_steps,
+            mode=mode,
+            num_blocks=num_layers,
+            task_type="node" if node_level_task else "graph",
+            dropout=dropout,
+        )
+
+    def forward(self, data):
+        batch = getattr(data, "batch", None)
+        return self.model(data.x, data.edge_index, batch)

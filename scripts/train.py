@@ -55,6 +55,10 @@ parser.add_argument("--convergence_log", type=str, default=None, help="Path to t
 parser.add_argument("--diversity_plot_dir", type=str, default=None, help="Directory to save per-step node diversity plots every 10 epochs (GSSM only)")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
 
+# GenLGSM parameters
+parser.add_argument("--glgsm_mode", type=str, default="option1",
+                    help="Hop mode: option1/option2/path_b (learnable) or lgsm_adj/lgsm_nbt (paper Seq)")
+
 # phdgn specific parameters
 parser.add_argument("--beta", type=float, help="Beta parameter for the PHDGN model")
 parser.add_argument("--p_conv_mode", type=str, choices=["naive", "gcn"], help="P convolution mode for the PhDGN model")
