@@ -239,6 +239,8 @@ class LitGraphNN(L.LightningModule):
             ),
             sync_dist=True,
             prog_bar=True,
+            on_step=False,
+            on_epoch=True,
             batch_size=batch.y.size(0),
         )
         self.log(
