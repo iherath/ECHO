@@ -2,9 +2,11 @@
 ECHO adapter for GenLGSMModel (PyG sparse batch, no cross-graph padding).
 
 kwargs:
-    glgsm_mode : option1 | option2 | path_b | lgsm_adj | lgsm_nbt
-    num_layers : processing depth (default 4)
-    num_steps  : sequence length L (default 40)
+    glgsm_mode       : option1 | option2 | path_b | lgsm_adj | lgsm_nbt | hyper
+    num_layers       : processing depth (default 4)
+    num_steps        : sequence length L (default 40)
+    window_size      : memory depth M for 'hyper' mode (default 2)
+    hyper_hidden_dim : hypernetwork MLP hidden dim for 'hyper' mode (default 64)
 """
 
 import os
@@ -34,6 +36,8 @@ class GenLGSM(nn.Module):
         super().__init__()
         mode = kwargs.get('glgsm_mode', 'option1')
         dropout = kwargs.get('dropout', 0.0)
+        window_size = kwargs.get('window_size', 2)
+        hyper_hidden_dim = kwargs.get('hyper_hidden_dim', 64)
 
         self.model = GenLGSMModel(
             in_dim=input_dim,
@@ -45,6 +49,8 @@ class GenLGSM(nn.Module):
             num_blocks=num_layers,
             task_type="node" if node_level_task else "graph",
             dropout=dropout,
+            window_size=window_size,
+            hyper_hidden_dim=hyper_hidden_dim,
         )
 
     def forward(self, data):

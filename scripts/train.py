@@ -57,7 +57,11 @@ parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biase
 
 # GenLGSM parameters
 parser.add_argument("--glgsm_mode", type=str, default="option1",
-                    help="Hop mode: option1/option2/path_b (learnable) or lgsm_adj/lgsm_nbt (paper Seq)")
+                    help="Hop mode: option1/option2/path_b (learnable) or lgsm_adj/lgsm_nbt (paper Seq) or hyper")
+parser.add_argument("--window_size", type=int, default=2,
+                    help="Memory depth M for GenLGSM 'hyper' mode (M=2 suffices to recover NBT recurrence)")
+parser.add_argument("--hyper_hidden_dim", type=int, default=64,
+                    help="Hypernetwork MLP hidden dim for GenLGSM 'hyper' mode")
 
 # phdgn specific parameters
 parser.add_argument("--beta", type=float, help="Beta parameter for the PHDGN model")
