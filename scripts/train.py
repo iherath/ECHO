@@ -26,6 +26,19 @@ parser.add_argument("--num_layers", type=int, help="Number of layers in the GNN"
 parser.add_argument("--hidden_dim", type=int, help="Hidden dimension of the GNN")
 parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate for the optimizer")
 parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay for the optimizer")
+parser.add_argument("--lr_scheduler", type=str, default="none",
+                    choices=["none", "onecycle", "cosine", "cosine_wr", "plateau"],
+                    help="LR scheduler: none (fixed), onecycle, cosine, cosine_wr, plateau")
+parser.add_argument("--max_lr", type=float, default=None,
+                    help="Peak LR for onecycle (defaults to 5x --lr if not set)")
+parser.add_argument("--lr_min", type=float, default=1e-6,
+                    help="Minimum LR floor for cosine/cosine_wr schedulers")
+parser.add_argument("--cosine_T0", type=int, default=25,
+                    help="Epochs per first restart cycle for cosine_wr")
+parser.add_argument("--scheduler_patience", type=int, default=20,
+                    help="Epochs of stagnant val_loss before LR is halved (plateau only)")
+parser.add_argument("--max_epochs", type=int, default=1000, help="Maximum training epochs")
+parser.add_argument("--es_patience", type=int, default=100, help="Early stopping patience (epochs)")
 parser.add_argument("--batch_size", type=int, default=256, help="Batch size for the DataLoader")
 parser.add_argument("--gnn_type", type=str)
 
@@ -62,6 +75,8 @@ parser.add_argument("--window_size", type=int, default=2,
                     help="Memory depth M for GenLGSM 'hyper' mode (M=2 suffices to recover NBT recurrence)")
 parser.add_argument("--hyper_hidden_dim", type=int, default=64,
                     help="Hypernetwork MLP hidden dim for GenLGSM 'hyper' mode")
+parser.add_argument("--batched", action="store_true",
+                    help="Use padded-batch vectorized layers for GenLGSM (8-15x faster)")
 
 # phdgn specific parameters
 parser.add_argument("--beta", type=float, help="Beta parameter for the PHDGN model")
@@ -148,15 +163,15 @@ def train(seed, config):
         if config.wandb else True  # True = Lightning's default CSVLogger
     )
     callbacks = [
-        EarlyStopping(monitor="val_loss", patience=100),
+        EarlyStopping(monitor="val_loss", patience=config.es_patience),
         ModelCheckpoint(monitor="val_loss", save_top_k=1),
     ]
     if config.diversity_plot_dir and config.gnn_type == "GSSM":
         callbacks.append(DiversityPlotCallback(config.diversity_plot_dir))
 
     trainer = L.Trainer(
-        max_epochs=1000,
-        accelerator="gpu",
+        max_epochs=config.max_epochs,
+        accelerator=config.device,
         gradient_clip_val=1.0,
         callbacks=callbacks,
         logger=logger,

@@ -7,6 +7,7 @@ kwargs:
     num_steps        : sequence length L (default 40)
     window_size      : memory depth M for 'hyper' mode (default 2)
     hyper_hidden_dim : hypernetwork MLP hidden dim for 'hyper' mode (default 64)
+    batched          : use padded-batch vectorized layers (default False)
 """
 
 import os
@@ -34,10 +35,11 @@ class GenLGSM(nn.Module):
         **kwargs,
     ):
         super().__init__()
-        mode = kwargs.get('glgsm_mode', 'option1')
-        dropout = kwargs.get('dropout', 0.0)
-        window_size = kwargs.get('window_size', 2)
+        mode             = kwargs.get('glgsm_mode', 'option1')
+        dropout          = kwargs.get('dropout', 0.0)
+        window_size      = kwargs.get('window_size', 2)
         hyper_hidden_dim = kwargs.get('hyper_hidden_dim', 64)
+        batched          = kwargs.get('batched', False)
 
         self.model = GenLGSMModel(
             in_dim=input_dim,
@@ -51,6 +53,7 @@ class GenLGSM(nn.Module):
             dropout=dropout,
             window_size=window_size,
             hyper_hidden_dim=hyper_hidden_dim,
+            batched=batched,
         )
 
     def forward(self, data):

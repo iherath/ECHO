@@ -99,6 +99,11 @@ class LitGraphNN(L.LightningModule):
         enable_timing: bool = False,
         timing_csv_base_path: str = "training_timings", # New parameter for base path
         task: str = "sssp",
+        lr_scheduler: str = "none",
+        max_lr: Optional[float] = None,
+        lr_min: float = 1e-6,
+        cosine_T0: int = 25,
+        scheduler_patience: int = 20,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -124,6 +129,11 @@ class LitGraphNN(L.LightningModule):
             self.model.parameters(), lr=lr, weight_decay=weight_decay
         )
         self.scaling_factor = scaling_factor
+        self.lr_scheduler_type = lr_scheduler
+        self.max_lr = max_lr if max_lr is not None else lr * 5
+        self.lr_min = lr_min
+        self.cosine_T0 = cosine_T0
+        self.scheduler_patience = scheduler_patience
 
         # save hyperparameters
         self.save_hyperparameters()
@@ -287,7 +297,45 @@ class LitGraphNN(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return self.optimizer
+        opt = self.optimizer
+        sched_type = self.lr_scheduler_type
+
+        if sched_type == "none":
+            return opt
+
+        if sched_type == "onecycle":
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                opt,
+                max_lr=self.max_lr,
+                total_steps=self.trainer.estimated_stepping_batches,
+                pct_start=0.1,
+                anneal_strategy="cos",
+                final_div_factor=1e3,
+            )
+            return {"optimizer": opt, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
+
+        if sched_type == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                opt, T_max=self.trainer.max_epochs, eta_min=self.lr_min
+            )
+            return {"optimizer": opt, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
+
+        if sched_type == "cosine_wr":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                opt, T_0=self.cosine_T0, T_mult=2, eta_min=self.lr_min
+            )
+            return {"optimizer": opt, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
+
+        if sched_type == "plateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                opt, mode="min", factor=0.5, patience=self.scheduler_patience
+            )
+            return {
+                "optimizer": opt,
+                "lr_scheduler": {"scheduler": scheduler, "monitor": "val_loss", "interval": "epoch"},
+            }
+
+        raise ValueError(f"Unknown lr_scheduler: {sched_type!r}")
     
 
     def __str__(self):
