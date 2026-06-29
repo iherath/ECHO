@@ -209,14 +209,18 @@ class LitGraphNN(L.LightningModule):
                 out.detach() * self.scaling_factor, batch.y * self.scaling_factor
             ),
             sync_dist=True,
+            on_step=False,
+            on_epoch=True,
             batch_size=batch.y.size(0),
         )
         self.log(
             "train_mse",
             torch.nn.functional.mse_loss(
                 out.detach() * self.scaling_factor, batch.y * self.scaling_factor
-            ), 
+            ),
             sync_dist=True,
+            on_step=False,
+            on_epoch=True,
             batch_size=batch.y.size(0),
         )
         return loss
@@ -259,6 +263,8 @@ class LitGraphNN(L.LightningModule):
                 out.detach() * self.scaling_factor, batch.y * self.scaling_factor
             ),
             sync_dist=True,
+            on_step=False,
+            on_epoch=True,
             batch_size=batch.y.size(0),
         )
         return loss
