@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --account=cis250184p
-#SBATCH --partition=GPU-shared
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=5
+# Single GenLGSM training job for Bridges-2.
+# All caps vars are injected by submit_glgsm.sh via --export.
+#SBATCH -A cis250184p
+#SBATCH -p GPU-shared
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:v100-32:1
-#SBATCH --time=12:00:00
-
-# TASK, SEED, and RUN are injected by submit_glgsm.sh via --export
+#SBATCH -t 12:00:00
 #SBATCH --output=logs/glgsm_%x_%j.out
 #SBATCH --error=logs/glgsm_%x_%j.err
 
@@ -23,23 +23,25 @@ conda activate "$CONDA_ENV"
 cd "$ECHO_DIR"
 
 echo "=== GenLGSM  task=${TASK}  seed=${SEED}  run=${RUN}  node=$(hostname) ==="
+echo "    num_steps=${NUM_STEPS}  num_layers=${NUM_LAYERS}  lr=${LR}"
 
 python scripts/train.py \
-    --task        "$TASK" \
-    --seed        "$SEED" \
-    --gnn_type    GenLGSM \
-    --glgsm_mode  hyper \
-    --hidden_dim  64 \
-    --num_layers  4 \
-    --d_state     64 \
-    --hyper_hidden_dim 128 \
-    --window_size 2 \
-    --lr          0.0001 \
-    --batch_size  32 \
-    --max_epochs  1000 \
-    --es_patience 100 \
-    --dropout     0.0 \
-    --weight_decay 0.0 \
-    --lr_scheduler none \
-    --device      gpu \
+    --task             "$TASK" \
+    --seed             "$SEED" \
+    --gnn_type         GenLGSM \
+    --glgsm_mode       hyper \
+    --hidden_dim       64 \
+    --num_layers       "$NUM_LAYERS" \
+    --d_state          64 \
+    --hyper_hidden_dim "$HYPER_HIDDEN" \
+    --window_size      "$WINDOW_SIZE" \
+    --num_steps        "$NUM_STEPS" \
+    --lr               "$LR" \
+    --batch_size       32 \
+    --max_epochs       1000 \
+    --es_patience      100 \
+    --dropout          0.0 \
+    --weight_decay     0.0 \
+    --lr_scheduler     none \
+    --device           gpu \
     --wandb
