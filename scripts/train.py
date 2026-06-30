@@ -67,6 +67,7 @@ parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate in 
 parser.add_argument("--convergence_log", type=str, default=None, help="Path to txt file for logging GSSMLayer step counts")
 parser.add_argument("--diversity_plot_dir", type=str, default=None, help="Directory to save per-step node diversity plots every 10 epochs (GSSM only)")
 parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+parser.add_argument("--seed", type=int, default=1, help="Random seed for reproducibility")
 
 # GenLGSM parameters
 parser.add_argument("--glgsm_mode", type=str, default="option1",
@@ -215,7 +216,7 @@ def train(seed, config):
 if __name__ == "__main__":
     args = parser.parse_args()
     metrics = train(
-        seed=1,
+        seed=args.seed,
         config=args,
     )
 
