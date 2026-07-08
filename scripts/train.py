@@ -94,7 +94,7 @@ from torch_geometric.loader import DataLoader
 import torch
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 
 import os
 from utils import get_dataset, KHopTransform
@@ -160,8 +160,9 @@ def train(seed, config):
     )
 
     logger = (
-        WandbLogger(project="ECHO-GSSM", name=f"{task}-{config.gnn_type}")
-        if config.wandb else True  # True = Lightning's default CSVLogger
+        WandbLogger(project="ECHO-GSSM", name=f"{task}-{config.gnn_type}-seed{config.seed}")
+        if config.wandb
+        else CSVLogger(save_dir=".", name="lightning_logs", version=f"{task}_{config.seed}")
     )
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=config.es_patience),
