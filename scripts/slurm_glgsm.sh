@@ -3,6 +3,7 @@
 # All caps vars are injected by submit_glgsm.sh via --export.
 #SBATCH -A cis250184p
 #SBATCH -p GPU-shared
+#SBATCH --qos=gpu
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus=v100-32:1
