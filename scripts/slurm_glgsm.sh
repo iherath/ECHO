@@ -5,7 +5,7 @@
 #SBATCH -p GPU-shared
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:v100-32:1
+#SBATCH --gpus=v100-32:1
 #SBATCH -t 48:00:00
 #SBATCH --output=logs/glgsm_%x_%j.out
 #SBATCH --error=logs/glgsm_%x_%j.err
