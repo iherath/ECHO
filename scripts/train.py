@@ -129,7 +129,8 @@ def train(seed, config):
 
     scaling_factor = data_train.scaling_factor[task]
 
-    if scaling_factor is None and task == "chem":
+    # charge/energy have no target normalization (max_charge is None) -> report in native scale
+    if scaling_factor is None:
         scaling_factor = 1.0
 
 
@@ -205,7 +206,6 @@ def train(seed, config):
         "test_loss": trainer.callback_metrics["test_loss"].item(),
         "test_mse": trainer.callback_metrics["test_mse"].item(),
         "test_mae": trainer.callback_metrics["test_mae"].item(),
-        "test_acc": trainer.callback_metrics["test_acc"].item(),
         "best_epoch": best_epoch,
         "best_checkpoint_path": trainer.checkpoint_callback.best_model_path, #type: ignore
     }
