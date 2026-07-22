@@ -7,7 +7,8 @@
 # Hyperparams per task (Table 8, LGSM paper), adapted for 16-GPU DDP:
 #   energy : steps=32, layers=2, max_epochs=500
 #   charge : steps=40, layers=4, max_epochs=300
-# es_patience=100 is set in slurm_glgsm.sh; 2 seeds per task.
+# es_patience=100 is set in slurm_glgsm.sh. Runs `runs` seeds/task starting at seed_start
+# (=2 here: seed 1 is already running/queued for both tasks, so start the new ones at 2).
 #
 # Multi-node DDP runs 16 V100s (2 GPU nodes) -> effective batch = 16 x 32 = 512 (was 32).
 # lr raised to 1e-3 (~sqrt scaling of the paper's 3e-4 at batch 32) to match the big batch.
@@ -16,10 +17,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$SCRIPT_DIR/../logs"
 
-# Format: "task runs num_steps num_layers lr max_epochs"
+# Format: "task runs num_steps num_layers lr max_epochs seed_start"
 TASK_CONFIGS=(
-    "energy 2  32  2  0.001  500"
-    "charge 2  40  4  0.001  300"
+    "energy 2  32  2  0.001  500  2"
+    "charge 2  40  4  0.001  300  2"
 )
 
 # hyper_hidden_dim and window_size not specified in Table 8; use best known values from hparams
@@ -27,8 +28,8 @@ HYPER_HIDDEN=128
 WINDOW_SIZE=2
 
 for config in "${TASK_CONFIGS[@]}"; do
-    read -r TASK N NUM_STEPS NUM_LAYERS LR MAX_EPOCHS <<< "$config"
-    for RUN in $(seq 1 "$N"); do
+    read -r TASK N NUM_STEPS NUM_LAYERS LR MAX_EPOCHS SEED_START <<< "$config"
+    for RUN in $(seq "$SEED_START" $((SEED_START + N - 1))); do
         JOB_NAME="glgsm_${TASK}_run${RUN}"
         sbatch \
             --job-name="$JOB_NAME" \
