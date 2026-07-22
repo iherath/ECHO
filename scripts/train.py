@@ -20,6 +20,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, help="Task to run: [sssp, ecc, diam, chem]",)
 
 parser.add_argument("--device", type=str, default="gpu", help="Device to use for training")
+parser.add_argument("--devices", type=int, default=1,
+                    help="Number of GPUs for data-parallel (DDP) training; >1 shards each epoch across GPUs")
 # general gnn parameters
 parser.add_argument("--conv_layer", type=str)
 parser.add_argument("--num_layers", type=int, help="Number of layers in the GNN")
@@ -172,9 +174,13 @@ def train(seed, config):
     if config.diversity_plot_dir and config.gnn_type == "GSSM":
         callbacks.append(DiversityPlotCallback(config.diversity_plot_dir))
 
+    # devices>1 -> DDP: each GPU trains on a different batch shard in parallel (~N x more epochs/hour)
     trainer = L.Trainer(
         max_epochs=config.max_epochs,
         accelerator=config.device,
+        devices=config.devices,
+        num_nodes=1,
+        strategy="ddp" if config.devices > 1 else "auto",
         gradient_clip_val=1.0,
         callbacks=callbacks,
         logger=logger,
@@ -221,12 +227,14 @@ if __name__ == "__main__":
         config=args,
     )
 
-    print("\n" + "=" * 40)
-    print(f"  Task : {args.task.upper()}   Model : {args.gnn_type}")
-    print("=" * 40)
-    print(f"  val   MAE : {metrics['val_mae']:.6f}")
-    print(f"  val   MSE : {metrics['val_mse']:.6f}")
-    print(f"  test  MAE : {metrics['test_mae']:.6f}")
-    print(f"  test  MSE : {metrics['test_mse']:.6f}")
-    print(f"  best epoch: {metrics['best_epoch']}")
-    print("=" * 40 + "\n")
+    # under DDP srun runs one process per GPU; only rank 0 prints the summary (SLURM_PROCID=0)
+    if int(os.environ.get("SLURM_PROCID", 0)) == 0:
+        print("\n" + "=" * 40)
+        print(f"  Task : {args.task.upper()}   Model : {args.gnn_type}")
+        print("=" * 40)
+        print(f"  val   MAE : {metrics['val_mae']:.6f}")
+        print(f"  val   MSE : {metrics['val_mse']:.6f}")
+        print(f"  test  MAE : {metrics['test_mae']:.6f}")
+        print(f"  test  MSE : {metrics['test_mse']:.6f}")
+        print(f"  best epoch: {metrics['best_epoch']}")
+        print("=" * 40 + "\n")
