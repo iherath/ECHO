@@ -21,7 +21,9 @@ parser.add_argument("--task", type=str, help="Task to run: [sssp, ecc, diam, che
 
 parser.add_argument("--device", type=str, default="gpu", help="Device to use for training")
 parser.add_argument("--devices", type=int, default=1,
-                    help="Number of GPUs for data-parallel (DDP) training; >1 shards each epoch across GPUs")
+                    help="GPUs per node for data-parallel (DDP) training; >1 shards each epoch across GPUs")
+parser.add_argument("--num_nodes", type=int, default=1,
+                    help="Nodes for multi-node DDP (Bridges-2 GPU partition: 1 node = 8 GPUs, 2 = 16 GPUs)")
 # general gnn parameters
 parser.add_argument("--conv_layer", type=str)
 parser.add_argument("--num_layers", type=int, help="Number of layers in the GNN")
@@ -174,13 +176,14 @@ def train(seed, config):
     if config.diversity_plot_dir and config.gnn_type == "GSSM":
         callbacks.append(DiversityPlotCallback(config.diversity_plot_dir))
 
-    # devices>1 -> DDP: each GPU trains on a different batch shard in parallel (~N x more epochs/hour)
+    # DDP: each of (devices x num_nodes) GPUs trains a different batch shard in parallel (~N x more epochs/hour)
+    world_size = config.devices * config.num_nodes
     trainer = L.Trainer(
         max_epochs=config.max_epochs,
         accelerator=config.device,
         devices=config.devices,
-        num_nodes=1,
-        strategy="ddp" if config.devices > 1 else "auto",
+        num_nodes=config.num_nodes,
+        strategy="ddp" if world_size > 1 else "auto",
         gradient_clip_val=1.0,
         callbacks=callbacks,
         logger=logger,

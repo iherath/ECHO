@@ -1,13 +1,14 @@
 #!/bin/bash
-# Quick DDP smoke test: 1 epoch of the energy task across 4 V100s to confirm all
-# ranks initialize and an epoch completes before committing a full 48h run.
+# Multi-node DDP smoke test: confirms 16 ranks across 2 GPU-partition nodes register
+# with NCCL over InfiniBand (a NEW failure surface vs the single-node smoke) before a
+# full run. Won't finish the energy epoch in 20 min -- watch the .err for the line
+# "All distributed processes registered. Starting with 16 processes".
 # Run from ECHO_DIR (ensure logs/ exists):  sbatch scripts/slurm_glgsm_smoke.sh
 #SBATCH -A cis250184p
-#SBATCH -p GPU-shared
-#SBATCH --qos=gpu
-#SBATCH -N 1
-#SBATCH --gpus=v100-32:4
-#SBATCH --ntasks-per-node=4
+#SBATCH -p GPU
+#SBATCH -N 2
+#SBATCH --gpus=v100-32:16
+#SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=5
 #SBATCH -t 00:20:00
 #SBATCH --job-name=glgsm_smoke
@@ -26,7 +27,7 @@ conda activate "$CONDA_ENV"
 
 cd "$ECHO_DIR"
 
-echo "=== GenLGSM DDP smoke  node=$(hostname)  gpus=${SLURM_NTASKS_PER_NODE} ==="
+echo "=== GenLGSM DDP smoke  nodes=${SLURM_NNODES}  gpus/node=${SLURM_NTASKS_PER_NODE} ==="
 
 # no --wandb: use the CSV logger so the smoke test needs no wandb login
 srun python scripts/train.py \
@@ -48,4 +49,5 @@ srun python scripts/train.py \
     --weight_decay     0.0 \
     --lr_scheduler     none \
     --device           gpu \
-    --devices          "${SLURM_NTASKS_PER_NODE}"
+    --devices          "${SLURM_NTASKS_PER_NODE}" \
+    --num_nodes        "${SLURM_NNODES}"

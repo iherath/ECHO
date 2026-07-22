@@ -2,11 +2,10 @@
 # Single GenLGSM training job for Bridges-2.
 # All caps vars are injected by submit_glgsm.sh via --export.
 #SBATCH -A cis250184p
-#SBATCH -p GPU-shared
-#SBATCH --qos=gpu
-#SBATCH -N 1
-#SBATCH --gpus=v100-32:4
-#SBATCH --ntasks-per-node=4
+#SBATCH -p GPU
+#SBATCH -N 2
+#SBATCH --gpus=v100-32:16
+#SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=5
 #SBATCH -t 48:00:00
 #SBATCH --output=logs/glgsm_%x_%j.out
@@ -27,9 +26,10 @@ cd "$ECHO_DIR"
 echo "=== GenLGSM  task=${TASK}  seed=${SEED}  run=${RUN}  node=$(hostname) ==="
 echo "    num_steps=${NUM_STEPS}  num_layers=${NUM_LAYERS}  lr=${LR}"
 
-# srun launches one task per GPU (== --ntasks-per-node); --devices follows it so
-# Lightning binds one DDP rank per GPU. DDP effective batch = devices x batch_size
-# (4 x 32 = 128); if val_loss converges worse than single-GPU, scale --lr up ~4x.
+# srun launches one task per GPU across all nodes; --devices = GPUs/node and
+# --num_nodes = node count, so Lightning binds one DDP rank per GPU (world = 8 x 2 = 16).
+# DDP effective batch = world_size x batch_size (16 x 32 = 512, vs 32 single-GPU) --
+# large-batch regime: scale --lr up (sqrt rule ~1.2e-3) or convergence will degrade.
 srun python scripts/train.py \
     --task             "$TASK" \
     --seed             "$SEED" \
@@ -50,4 +50,5 @@ srun python scripts/train.py \
     --lr_scheduler     none \
     --device           gpu \
     --devices          "${SLURM_NTASKS_PER_NODE}" \
+    --num_nodes        "${SLURM_NNODES}" \
     --wandb

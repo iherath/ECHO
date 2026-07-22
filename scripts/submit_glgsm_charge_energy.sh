@@ -8,9 +8,9 @@
 #   energy    : lr=3e-4, steps=32, layers=2
 #   charge    : lr=3e-4, steps=40, layers=4
 #
-# Multi-GPU: slurm_glgsm.sh runs DDP across 4 V100s, so effective batch = 4 x 32 = 128
-# (was 32). lr below is the paper value at batch 32; if val_loss converges worse than
-# the single-GPU run, scale lr up toward the linear rule (~1.2e-3).
+# Multi-node DDP: slurm_glgsm.sh runs 16 V100s (2 GPU-partition nodes), so effective
+# batch = 16 x 32 = 512 (was 32). lr below is the paper value at batch 32; at this batch
+# scale lr up (sqrt rule ~1.2e-3, or linear ~4.8e-3 + warmup) or convergence will degrade.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
