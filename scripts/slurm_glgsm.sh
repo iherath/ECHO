@@ -8,6 +8,8 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=5
 #SBATCH -t 48:00:00
+#SBATCH --signal=SIGUSR1@90
+#SBATCH --requeue
 #SBATCH --output=logs/glgsm_%x_%j.out
 #SBATCH --error=logs/glgsm_%x_%j.err
 
@@ -30,6 +32,8 @@ echo "    num_steps=${NUM_STEPS}  num_layers=${NUM_LAYERS}  lr=${LR}"
 # --num_nodes = node count, so Lightning binds one DDP rank per GPU (world = 8 x 2 = 16).
 # DDP effective batch = world_size x batch_size (16 x 32 = 512, vs 32 single-GPU) --
 # large-batch regime: scale --lr up (sqrt rule ~1.2e-3) or convergence will degrade.
+# Chaining past 48h: --signal/--requeue let Lightning checkpoint on SIGUSR1 and requeue;
+# --resume also picks up last.ckpt on a manual re-submit. Clear checkpoints/ for a fresh start.
 srun python scripts/train.py \
     --task             "$TASK" \
     --seed             "$SEED" \
@@ -51,4 +55,5 @@ srun python scripts/train.py \
     --device           gpu \
     --devices          "${SLURM_NTASKS_PER_NODE}" \
     --num_nodes        "${SLURM_NNODES}" \
+    --resume \
     --wandb

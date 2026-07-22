@@ -24,6 +24,8 @@ parser.add_argument("--devices", type=int, default=1,
                     help="GPUs per node for data-parallel (DDP) training; >1 shards each epoch across GPUs")
 parser.add_argument("--num_nodes", type=int, default=1,
                     help="Nodes for multi-node DDP (Bridges-2 GPU partition: 1 node = 8 GPUs, 2 = 16 GPUs)")
+parser.add_argument("--resume", action="store_true",
+                    help="Resume from ./checkpoints/<task>_seed<seed>/last.ckpt if present (for chaining 48h jobs)")
 # general gnn parameters
 parser.add_argument("--conv_layer", type=str)
 parser.add_argument("--num_layers", type=int, help="Number of layers in the GNN")
@@ -169,9 +171,11 @@ def train(seed, config):
         if config.wandb
         else CSVLogger(save_dir=".", name="lightning_logs", version=f"{task}_{config.seed}")
     )
+    # per-(task,seed) checkpoint dir + save_last so a re-submitted job can resume from last.ckpt
+    ckpt_dir = f"./checkpoints/{task}_seed{config.seed}"
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=config.es_patience),
-        ModelCheckpoint(monitor="val_loss", save_top_k=1),
+        ModelCheckpoint(dirpath=ckpt_dir, monitor="val_loss", save_top_k=1, save_last=True),
     ]
     if config.diversity_plot_dir and config.gnn_type == "GSSM":
         callbacks.append(DiversityPlotCallback(config.diversity_plot_dir))
@@ -189,7 +193,10 @@ def train(seed, config):
         logger=logger,
     )
 
-    trainer.fit(model, train_loader, val_loader)
+    # --resume continues from last.ckpt (EarlyStopping counter restored too); None = fresh start
+    last_ckpt = os.path.join(ckpt_dir, "last.ckpt")
+    resume_path = last_ckpt if config.resume and os.path.exists(last_ckpt) else None
+    trainer.fit(model, train_loader, val_loader, ckpt_path=resume_path)
 
     if config.convergence_log and config.gnn_type == "GSSM":
         import sys as _sys, os as _os
