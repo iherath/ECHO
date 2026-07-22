@@ -43,8 +43,8 @@ srun python scripts/train.py \
     --num_steps        "$NUM_STEPS" \
     --lr               "$LR" \
     --batch_size       32 \
-    --max_epochs       1000 \
-    --es_patience      100 \
+    --max_epochs       200 \
+    --es_patience      50 \
     --dropout          0.0 \
     --weight_decay     0.0 \
     --lr_scheduler     none \
