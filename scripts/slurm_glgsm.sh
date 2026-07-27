@@ -36,6 +36,7 @@ echo "    num_steps=${NUM_STEPS}  num_layers=${NUM_LAYERS}  lr=${LR}"
 # --resume also picks up last.ckpt on a manual re-submit. Clear checkpoints/ for a fresh start.
 srun python scripts/train.py \
     --task             "$TASK" \
+    --lrim_name        "${LRIM_NAME:-lrim_16_0.6_10k}" \
     --seed             "$SEED" \
     --gnn_type         GenLGSM \
     --glgsm_mode       hyper \

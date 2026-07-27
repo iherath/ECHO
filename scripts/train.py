@@ -17,7 +17,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected for --selective.')
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, help="Task to run: [sssp, ecc, diam, chem]",)
+parser.add_argument("--task", type=str, help="Task to run: [sssp, ecc, diam, charge, energy, lrim]",)
 
 parser.add_argument("--device", type=str, default="gpu", help="Device to use for training")
 parser.add_argument("--devices", type=int, default=1,
@@ -85,6 +85,10 @@ parser.add_argument("--hyper_hidden_dim", type=int, default=64,
 parser.add_argument("--batched", action="store_true",
                     help="Use padded-batch vectorized layers for GenLGSM (8-15x faster)")
 
+# LRIM (Long-Range Ising Model) benchmark: --task lrim selects the HF file below
+parser.add_argument("--lrim_name", type=str, default="lrim_16_0.6_10k",
+                    help="LRIM dataset file on HuggingFace (e.g. lrim_16_0.6_10k = 16x16 grid, sigma=0.6 hard)")
+
 # phdgn specific parameters
 parser.add_argument("--beta", type=float, help="Beta parameter for the PHDGN model")
 parser.add_argument("--p_conv_mode", type=str, choices=["naive", "gcn"], help="P convolution mode for the PhDGN model")
@@ -122,22 +126,29 @@ def train(seed, config):
 
     print("Current directory: ", os.getcwd())
 
-    data_train, data_val, data_test, num_feat, num_class = get_dataset(
-        root="./data/",
-        task=task,
-        pre_transform=(
-            KHopTransform(k=config.k_hop)
-            if config.gnn_type == "DRew_GCN"
-            else None
-        ),
-        constant_feature=config.constant_feature,
-    )
-
-    scaling_factor = data_train.scaling_factor[task]
-
-    # charge/energy have no target normalization (max_charge is None) -> report in native scale
-    if scaling_factor is None:
+    if task == "lrim":
+        # LRIM: per-node energy regression, no target normalization -> native scale
+        from utils.lrim_dataset import get_lrim_dataset
+        data_train, data_val, data_test, num_feat, num_class = get_lrim_dataset(
+            root="./data/", name=config.lrim_name)
         scaling_factor = 1.0
+    else:
+        data_train, data_val, data_test, num_feat, num_class = get_dataset(
+            root="./data/",
+            task=task,
+            pre_transform=(
+                KHopTransform(k=config.k_hop)
+                if config.gnn_type == "DRew_GCN"
+                else None
+            ),
+            constant_feature=config.constant_feature,
+        )
+
+        scaling_factor = data_train.scaling_factor[task]
+
+        # charge/energy have no target normalization (max_charge is None) -> report in native scale
+        if scaling_factor is None:
+            scaling_factor = 1.0
 
 
     print(f"Scaling factor for {task}: {scaling_factor}")
