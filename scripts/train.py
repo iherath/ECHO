@@ -177,8 +177,13 @@ def train(seed, config):
         **hp_conf,
     )
 
+    # encode the key hyperparams in the run name so wandb runs are self-describing
+    run_name = (
+        f"{task}-{config.gnn_type}-layers{config.num_layers}-steps{config.num_steps}"
+        f"-window{config.window_size}-seed{config.seed}"
+    )
     logger = (
-        WandbLogger(project="ECHO-GSSM", name=f"{task}-{config.gnn_type}-seed{config.seed}")
+        WandbLogger(project="ECHO-GSSM", name=run_name)
         if config.wandb
         else CSVLogger(save_dir=".", name="lightning_logs", version=f"{task}_{config.seed}")
     )
