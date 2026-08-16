@@ -19,7 +19,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../Graph-SSM"))
 
 import torch.nn as nn
-from gssm_model import FullGSSMModel
 
 
 class GSSM(nn.Module):
@@ -54,6 +53,10 @@ class GSSM(nn.Module):
         if conv_log:
             from gssm_layer import GSSMLayer
             GSSMLayer.configure_logging(conv_log)
+
+        # Imported here, not at module level: gssm_model lives in the sibling
+        # Graph-SSM repo, which need not be present for GenLGSM (HOPPER) runs.
+        from gssm_model import FullGSSMModel
 
         self.model = FullGSSMModel(
             d_input=input_dim,                               # (N, input_dim)
