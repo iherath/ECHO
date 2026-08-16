@@ -46,6 +46,8 @@ parser.add_argument("--scheduler_patience", type=int, default=20,
 parser.add_argument("--max_epochs", type=int, default=1000, help="Maximum training epochs")
 parser.add_argument("--es_patience", type=int, default=100, help="Early stopping patience (epochs)")
 parser.add_argument("--batch_size", type=int, default=256, help="Batch size for the DataLoader")
+parser.add_argument("--accumulate_grad_batches", type=int, default=1,
+                    help="Micro-batches per optimizer step; effective batch = batch_size x this")
 parser.add_argument("--gnn_type", type=str)
 
 # adgn, swan specific params
@@ -205,6 +207,7 @@ def train(seed, config):
         num_nodes=config.num_nodes,
         strategy="ddp" if world_size > 1 else "auto",
         gradient_clip_val=1.0,
+        accumulate_grad_batches=config.accumulate_grad_batches,
         callbacks=callbacks,
         logger=logger,
     )
