@@ -1,6 +1,7 @@
 import torch
 from torch_geometric.data.lightning import LightningDataset
 import lightning as L
+from lightning.pytorch.loggers import WandbLogger
 from models.gnn import GNN
 from models.adgn import ADGN
 from models.drew_delay import DRew_GCN
@@ -183,6 +184,65 @@ class LitGraphNN(L.LightningModule):
                 print(f"Error writing to timing CSV {self.timing_csv_file}: {e}")
             self._epoch_start_time = None
 
+        self._log_coeff_heatmap()
+
+    def _hyper_hop_layer(self):
+        """GenLGSM's hop layer when running glgsm_mode=hyper, else None."""
+        inner = getattr(self.model, "model", None)   # GenLGSM → GenLGSMModel
+        hop = getattr(inner, "hop_layer", None)
+        return hop if getattr(hop, "mode", None) == "hyper" else None
+
+    def _log_hyper_coeffs(self, batch_size: int):
+        """Per-epoch mean of the hypernetwork's α/β — one series per memory slot."""
+        hop = self._hyper_hop_layer()
+        if hop is None or hop.last_coeffs is None:
+            return
+
+        for name in ("alpha_A", "alpha_D", "alpha_I"):
+            a = hop.last_coeffs[name]                    # (B, L, M)
+            for j in range(a.size(-1)):                  # j = memory slot, 0 = most recent
+                self.log(f"coeff/{name}_j{j}", a[..., j].mean(),
+                         on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log(f"coeff/{name}_absmax", a.abs().max(), reduce_fx="max",
+                     on_step=False, on_epoch=True, batch_size=batch_size)
+
+        beta = hop.last_coeffs["beta"]                    # (B, L)
+        self.log("coeff/beta_mean", beta.mean(),
+                 on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("coeff/beta_absmax", beta.abs().max(), reduce_fx="max",
+                 on_step=False, on_epoch=True, batch_size=batch_size)
+
+    def _log_coeff_heatmap(self):
+        """Once per epoch: the whole (L, 3M+1) coefficient map as a wandb image."""
+        hop = self._hyper_hop_layer()
+        if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
+            return
+        if not isinstance(self.logger, WandbLogger):
+            return
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import wandb
+        except ImportError:
+            return
+
+        c = hop.last_coeffs
+        grid = torch.cat([                                # (L, 3M+1), mean over batch
+            c["alpha_A"].mean(0), c["alpha_D"].mean(0),
+            c["alpha_I"].mean(0), c["beta"].mean(0).unsqueeze(-1),
+        ], dim=-1).float().cpu().numpy()
+
+        lim = max(abs(grid).max(), 1e-8)                  # symmetric colour range around 0
+        fig, ax = plt.subplots(figsize=(6, 4))
+        im = ax.imshow(grid, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
+        ax.set_xlabel("α_A | α_D | α_I | β")
+        ax.set_ylabel("hop k")
+        ax.set_title(f"hypernetwork coefficients — epoch {self.current_epoch}")
+        fig.colorbar(im, ax=ax)
+        fig.tight_layout()
+        self.logger.experiment.log({"coeff/heatmap": wandb.Image(fig)})
+        plt.close(fig)
 
     def forward(self, data):
         return self.model(data)
@@ -223,6 +283,7 @@ class LitGraphNN(L.LightningModule):
             on_epoch=True,
             batch_size=batch.y.size(0),
         )
+        self._log_hyper_coeffs(batch.y.size(0))
         return loss
 
     def validation_step(self, batch, batch_idx):
