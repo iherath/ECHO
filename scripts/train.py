@@ -84,6 +84,9 @@ parser.add_argument("--window_size", type=int, default=2,
                     help="Memory depth M for GenLGSM 'hyper' mode (M=2 suffices to recover NBT recurrence)")
 parser.add_argument("--hyper_hidden_dim", type=int, default=64,
                     help="Hypernetwork MLP hidden dim for GenLGSM 'hyper' mode")
+parser.add_argument("--hyper_init", type=str, default="gcn", choices=["gcn", "chebyshev"],
+                    help="Initial coefficient prior for 'hyper' mode: gcn ([H, SH, S^2H, ...]) "
+                         "or chebyshev ([H, T_1(S)H, T_2(S)H, ...]); chebyshev needs window_size>=2")
 parser.add_argument("--batched", action="store_true",
                     help="Use padded-batch vectorized layers for GenLGSM (8-15x faster)")
 

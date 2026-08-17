@@ -39,6 +39,7 @@ class GenLGSM(nn.Module):
         dropout          = kwargs.get('dropout', 0.0)
         window_size      = kwargs.get('window_size', 2)
         hyper_hidden_dim = kwargs.get('hyper_hidden_dim', 64)
+        hyper_init       = kwargs.get('hyper_init', 'gcn')
         batched          = kwargs.get('batched', False)
 
         self.model = GenLGSMModel(
@@ -53,6 +54,7 @@ class GenLGSM(nn.Module):
             dropout=dropout,
             window_size=window_size,
             hyper_hidden_dim=hyper_hidden_dim,
+            hyper_init=hyper_init,
             batched=batched,
         )
 
