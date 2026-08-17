@@ -182,10 +182,13 @@ def train(seed, config):
         **hp_conf,
     )
 
-    # encode the key hyperparams in the run name so wandb runs are self-describing
+    # encode the key hyperparams in the run name so wandb runs are self-describing.
+    # Non-default hyper_init is appended so it doesn't collide with an otherwise
+    # identically-named run; the default keeps the original naming.
+    init_tag = "" if config.hyper_init == "gcn" else f"-{config.hyper_init}"
     run_name = (
         f"{task}-{config.gnn_type}-layers{config.num_layers}-steps{config.num_steps}"
-        f"-window{config.window_size}-seed{config.seed}"
+        f"-window{config.window_size}-seed{config.seed}{init_tag}"
     )
     logger = (
         WandbLogger(project="ECHO-GSSM", name=run_name)
