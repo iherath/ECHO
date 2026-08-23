@@ -1,7 +1,6 @@
 import torch
 from torch_geometric.data.lightning import LightningDataset
 import lightning as L
-from lightning.pytorch.loggers import WandbLogger
 from models.gnn import GNN
 from models.adgn import ADGN
 from models.drew_delay import DRew_GCN
@@ -69,9 +68,6 @@ class DiversityPlotCallback(L.Callback):
         plt.close(fig)
         print(f"[DiversityPlot] saved → {path}")
 
-
-# epochs between coefficient figure uploads (L figures each time)
-_COEFF_PLOT_EVERY = 10
 
 models_map = {
     "GNN": GNN,
@@ -187,7 +183,7 @@ class LitGraphNN(L.LightningModule):
                 print(f"Error writing to timing CSV {self.timing_csv_file}: {e}")
             self._epoch_start_time = None
 
-        self._log_coeff_figures()
+        self._log_coeff_per_step()
 
     def _hyper_hop_layer(self):
         """GenLGSM's hop layer when running glgsm_mode=hyper, else None."""
@@ -196,12 +192,11 @@ class LitGraphNN(L.LightningModule):
         return hop if getattr(hop, "mode", None) == "hyper" else None
 
     def _log_hyper_coeffs(self, batch_size: int):
-        """Per-epoch summary scalars for the hypernetwork's α/β.
+        """Whole-model summary scalars for the hypernetwork's α/β, averaged over the epoch.
 
-        Per-hop detail lives in the coeff/step{k} figures; these are the few numbers
-        worth a trend line. graph_std is the key diagnostic: the coefficients are only
-        graph-conditioned if the hypernetwork makes them differ between graphs, so a
-        graph_std pinned at 0 means the MLP has learned nothing graph-specific.
+        graph_std is the key diagnostic: the coefficients are only graph-conditioned if
+        the hypernetwork makes them differ between graphs, so a graph_std pinned at 0
+        means the MLP has learned nothing graph-specific.
         """
         hop = self._hyper_hop_layer()
         if hop is None or hop.last_coeffs is None:
@@ -217,54 +212,27 @@ class LitGraphNN(L.LightningModule):
                 self.log(f"coeff/{name}_graph_std", a.std(dim=0).mean(),
                          on_step=False, on_epoch=True, batch_size=batch_size)
 
-    def _log_coeff_figures(self):
-        """One wandb figure per sequence step: α_A / α_D / α_I over memory slots, plus β.
+    def _log_coeff_per_step(self):
+        """One line series per (sequence step, memory slot), grouped by step in wandb.
 
-        Uploaded every _COEFF_PLOT_EVERY epochs — L figures per upload is a lot of media
-        to push on every single epoch.
+        Keys are coeff/step{k}/alpha_A_j{j}, so wandb puts each sequence step in its own
+        panel section with 3M+1 curves tracked across epochs. Logged once per epoch from
+        the epoch-end hook rather than per batch: L*(3M+1) is 800 series at L=32, M=8,
+        which is far too many self.log calls to make on every training step. The values
+        are therefore the epoch's last batch, not an epoch average.
         """
         hop = self._hyper_hop_layer()
-        if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
-            return
-        if not isinstance(self.logger, WandbLogger):
-            return
-        if self.current_epoch % _COEFF_PLOT_EVERY:
-            return
-        try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            import wandb
-        except ImportError:
+        if hop is None or hop.last_coeffs is None:
             return
 
-        c = hop.last_coeffs                                   # batch-mean, on CPU as numpy
-        a_A = c["alpha_A"].mean(0).float().cpu().numpy()      # (L, M)
-        a_D = c["alpha_D"].mean(0).float().cpu().numpy()      # (L, M)
-        a_I = c["alpha_I"].mean(0).float().cpu().numpy()      # (L, M)
-        beta = c["beta"].mean(0).float().cpu().numpy()        # (L,)
-
-        L, M = a_A.shape
-        # one shared y-range so the per-step panels are directly comparable
-        lim = 1.1 * max(abs(a_A).max(), abs(a_D).max(), abs(a_I).max(), abs(beta).max(), 1e-8)
-
-        panels = {}
+        c = hop.last_coeffs
+        L = c["beta"].size(1)
         for k in range(L):
-            fig, axes = plt.subplots(1, 4, figsize=(11, 2.6), sharey=True)
-            series = (("α_A", a_A[k]), ("α_D", a_D[k]), ("α_I", a_I[k]), ("β", beta[k:k + 1]))
-            for ax, (label, vals) in zip(axes, series):
-                ax.bar(range(len(vals)), vals, color="#4C78A8")
-                ax.axhline(0.0, lw=0.8, color="0.6")
-                ax.set_title(label)
-                ax.set_xlabel("memory slot j")
-                ax.set_xticks(range(len(vals)))
-                ax.set_ylim(-lim, lim)
-            fig.suptitle(f"hop k={k}  —  epoch {self.current_epoch}")
-            fig.tight_layout()
-            panels[f"coeff/step{k:02d}"] = wandb.Image(fig)
-            plt.close(fig)
-
-        self.logger.experiment.log(panels)
+            for name in ("alpha_A", "alpha_D", "alpha_I"):
+                a_k = c[name][:, k]                          # (B, M) — this hop, all slots
+                for j in range(a_k.size(-1)):
+                    self.log(f"coeff/step{k:02d}/{name}_j{j}", a_k[:, j].mean(), batch_size=1)
+            self.log(f"coeff/step{k:02d}/beta", c["beta"][:, k].mean(), batch_size=1)
 
     def forward(self, data):
         return self.model(data)
