@@ -87,6 +87,9 @@ parser.add_argument("--hyper_hidden_dim", type=int, default=64,
 parser.add_argument("--hyper_init", type=str, default="gcn", choices=["gcn", "chebyshev"],
                     help="Initial coefficient prior for 'hyper' mode: gcn ([H, SH, S^2H, ...]) "
                          "or chebyshev ([H, T_1(S)H, T_2(S)H, ...]); chebyshev needs window_size>=2")
+parser.add_argument("--hyper_init_noise", type=float, default=0.0,
+                    help="Std of N(0, sigma^2) noise added to the alpha coefficients of the "
+                         "hyper_init prior; 0.0 = exact init. Beta is left unperturbed.")
 parser.add_argument("--batched", action="store_true",
                     help="Use padded-batch vectorized layers for GenLGSM (8-15x faster)")
 
@@ -186,6 +189,8 @@ def train(seed, config):
     # Non-default hyper_init is appended so it doesn't collide with an otherwise
     # identically-named run; the default keeps the original naming.
     init_tag = "" if config.hyper_init == "gcn" else f"-{config.hyper_init}"
+    if config.hyper_init_noise > 0.0:
+        init_tag += f"-noise{config.hyper_init_noise:g}"
     run_name = (
         f"{task}-{config.gnn_type}-layers{config.num_layers}-steps{config.num_steps}"
         f"-window{config.window_size}-seed{config.seed}{init_tag}"

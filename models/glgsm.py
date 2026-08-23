@@ -40,6 +40,7 @@ class GenLGSM(nn.Module):
         window_size      = kwargs.get('window_size', 2)
         hyper_hidden_dim = kwargs.get('hyper_hidden_dim', 64)
         hyper_init       = kwargs.get('hyper_init', 'gcn')
+        hyper_init_noise = kwargs.get('hyper_init_noise', 0.0)
         batched          = kwargs.get('batched', False)
 
         self.model = GenLGSMModel(
@@ -55,6 +56,7 @@ class GenLGSM(nn.Module):
             window_size=window_size,
             hyper_hidden_dim=hyper_hidden_dim,
             hyper_init=hyper_init,
+            hyper_init_noise=hyper_init_noise,
             batched=batched,
         )
 
