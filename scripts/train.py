@@ -186,15 +186,21 @@ def train(seed, config):
         **hp_conf,
     )
 
-    # encode the key hyperparams in the run name so wandb runs are self-describing.
-    # Non-default hyper_init is appended so it doesn't collide with an otherwise
-    # identically-named run; the default keeps the original naming.
-    init_tag = "" if config.hyper_init == "gcn" else f"-{config.hyper_init}"
-    if config.hyper_init_noise > 0.0:
-        init_tag += f"-noise{config.hyper_init_noise:g}"
+    # Encode the key hyperparams in the run name so wandb runs are self-describing.
+    # The hop mode goes in the name because cheb / lgsm_nbt / hyper are otherwise
+    # indistinguishable; window_size and the hyper_init flags exist only in hyper
+    # mode, so they are omitted for the fixed-propagation modes.
+    mode_tag = f"-{config.glgsm_mode}" if config.gnn_type == "GenLGSM" else ""
+    hyper_tag = ""
+    if config.gnn_type == "GenLGSM" and config.glgsm_mode == "hyper":
+        hyper_tag = f"-window{config.window_size}"
+        if config.hyper_init != "gcn":
+            hyper_tag += f"-{config.hyper_init}"
+        if config.hyper_init_noise > 0.0:
+            hyper_tag += f"-noise{config.hyper_init_noise:g}"
     run_name = (
-        f"{task}-{config.gnn_type}-layers{config.num_layers}-steps{config.num_steps}"
-        f"-window{config.window_size}-seed{config.seed}{init_tag}"
+        f"{task}-{config.gnn_type}{mode_tag}-layers{config.num_layers}"
+        f"-steps{config.num_steps}{hyper_tag}-seed{config.seed}"
     )
     logger = (
         WandbLogger(project="ECHO-GSSM", name=run_name)
