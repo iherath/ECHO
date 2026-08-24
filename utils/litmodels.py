@@ -224,13 +224,8 @@ class LitGraphNN(L.LightningModule):
                 a_A.std(dim=0).mean(), a_D.std(dim=0).mean(), a_I.std(dim=0).mean(),
             ]).mean())
 
-    def _log_coeff_heatmap(self):
-        """Once per epoch: the whole (L, 3M+1) coefficient map as a wandb image."""
-        hop = self._hyper_hop_layer()
-        if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
-            return
-        if not isinstance(self.logger, WandbLogger):
-            return
+    def _plot_coeff_grid(self, grid, key: str, title: str):
+        """Log an (L, 3M+1) coefficient grid as a wandb image, \u03b1 groups marked on the x axis."""
         try:
             import matplotlib
             matplotlib.use("Agg")
@@ -239,22 +234,64 @@ class LitGraphNN(L.LightningModule):
         except ImportError:
             return
 
+        M = (grid.shape[1] - 1) // 3                      # columns: \u03b1_A | \u03b1_D | \u03b1_I | \u03b2
+        lim = max(abs(grid).max(), 1e-8)                   # symmetric colour range around 0
+        fig, ax = plt.subplots(figsize=(7, 4))
+        im = ax.imshow(grid, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
+        for x in (M - 0.5, 2 * M - 0.5, 3 * M - 0.5):      # group boundaries
+            ax.axvline(x, color="k", lw=0.8)
+        ax.set_xticks([M / 2 - 0.5, 1.5 * M - 0.5, 2.5 * M - 0.5, 3 * M])
+        ax.set_xticklabels(["\u03b1_A", "\u03b1_D", "\u03b1_I", "\u03b2"])
+        ax.set_xlabel("memory slot j runs 0..M-1 within each group")
+        ax.set_ylabel("hop k")
+        ax.set_title(title)
+        fig.colorbar(im, ax=ax)
+        fig.tight_layout()
+        self.logger.experiment.log({key: wandb.Image(fig)})
+        plt.close(fig)
+
+    def on_train_start(self):
+        """Log the initialization itself.
+
+        The epoch-end heatmap is already a full epoch of optimizer steps old, so it can
+        never answer "was the init correct". coeff_prior is the ground truth: at step 0
+        the hypernetwork output is identically zero, so the coefficients *are* the prior.
+        """
+        hop = self._hyper_hop_layer()
+        if hop is None or not self.trainer.is_global_zero:
+            return
+
+        prior = hop.coeff_prior.detach().float().cpu()      # (L, 3M+1)
+        M = hop.window_size
+        print(f"[hyper_init] hop0 \u03b1_A[0]={prior[0, 0]:.4f}  hop1 \u03b1_A[0]={prior[1, 0]:.4f}  "
+              f"hop1 \u03b1_I[1]={prior[1, 2 * M + 1]:.4f}  "
+              f"nonzero cols at hop1={prior[1].nonzero().flatten().tolist()}")
+
+        if isinstance(self.logger, WandbLogger):
+            self._plot_coeff_grid(prior.numpy(), "coeff/prior",
+                                  "coefficient prior at initialization (step 0)")
+
+    def _log_coeff_heatmap(self):
+        """Once per epoch: the whole (L, 3M+1) coefficient map as a wandb image.
+
+        Logged from on_train_epoch_end, so "epoch N" is the state *after* that epoch's
+        optimizer steps \u2014 see coeff/prior for the initialization.
+        """
+        hop = self._hyper_hop_layer()
+        if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
+            return
+        if not isinstance(self.logger, WandbLogger):
+            return
+
         c = hop.last_coeffs
         grid = torch.cat([                                # (L, 3M+1), mean over batch
             c["alpha_A"].mean(0), c["alpha_D"].mean(0),
             c["alpha_I"].mean(0), c["beta"].mean(0).unsqueeze(-1),
         ], dim=-1).float().cpu().numpy()
-
-        lim = max(abs(grid).max(), 1e-8)                  # symmetric colour range around 0
-        fig, ax = plt.subplots(figsize=(6, 4))
-        im = ax.imshow(grid, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
-        ax.set_xlabel("\u03b1_A | \u03b1_D | \u03b1_I | \u03b2")
-        ax.set_ylabel("hop k")
-        ax.set_title(f"hypernetwork coefficients \u2014 epoch {self.current_epoch}")
-        fig.colorbar(im, ax=ax)
-        fig.tight_layout()
-        self.logger.experiment.log({"coeff/heatmap": wandb.Image(fig)})
-        plt.close(fig)
+        self._plot_coeff_grid(
+            grid, "coeff/heatmap",
+            f"hypernetwork coefficients \u2014 after epoch {self.current_epoch}",
+        )
 
     def forward(self, data):
         return self.model(data)
