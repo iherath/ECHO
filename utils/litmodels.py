@@ -1,6 +1,7 @@
 import torch
 from torch_geometric.data.lightning import LightningDataset
 import lightning as L
+from lightning.pytorch.loggers import WandbLogger
 from models.gnn import GNN
 from models.adgn import ADGN
 from models.drew_delay import DRew_GCN
@@ -69,6 +70,9 @@ class DiversityPlotCallback(L.Callback):
         print(f"[DiversityPlot] saved → {path}")
 
 
+# epochs between per-step coefficient chart uploads (each upload resends full history)
+_COEFF_CHART_EVERY = 10
+
 models_map = {
     "GNN": GNN,
     "ADGN": ADGN,
@@ -114,6 +118,8 @@ class LitGraphNN(L.LightningModule):
         self.timing_csv_file = None
         self.task = task
         self.scaling_factor = scaling_factor
+        self._coeff_epochs: list = []   # x-axis for the per-step coefficient charts
+        self._coeff_hist: list = []     # one (a_A, a_D, a_I, beta) tuple per recorded epoch
 
         self.model = models_map[gnn_type](
             input_dim=input_dim,
@@ -213,26 +219,52 @@ class LitGraphNN(L.LightningModule):
                          on_step=False, on_epoch=True, batch_size=batch_size)
 
     def _log_coeff_per_step(self):
-        """One line series per (sequence step, memory slot), grouped by step in wandb.
+        """One wandb chart per sequence step, each holding all 3M+1 coefficient lines.
 
-        Keys are coeff/step{k}/alpha_A_j{j}, so wandb puts each sequence step in its own
-        panel section with 3M+1 curves tracked across epochs. Logged once per epoch from
-        the epoch-end hook rather than per batch: L*(3M+1) is 800 series at L=32, M=8,
-        which is far too many self.log calls to make on every training step. The values
-        are therefore the epoch's last batch, not an epoch average.
+        wandb.plot.line_series builds a single multi-line panel, so hop k gets one tile
+        titled "hop k=..." with α_A[0..M-1], α_D[0..M-1], α_I[0..M-1] and β plotted
+        against epoch — rather than 3M+1 separate panels.
+
+        History is recorded every epoch but uploaded every _COEFF_CHART_EVERY epochs,
+        because each upload resends the full series. Values are the epoch's last batch.
         """
         hop = self._hyper_hop_layer()
-        if hop is None or hop.last_coeffs is None:
+        if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
             return
 
         c = hop.last_coeffs
-        L = c["beta"].size(1)
+        self._coeff_epochs.append(self.current_epoch)
+        self._coeff_hist.append((
+            c["alpha_A"].mean(0).float().cpu().numpy(),   # (L, M)
+            c["alpha_D"].mean(0).float().cpu().numpy(),   # (L, M)
+            c["alpha_I"].mean(0).float().cpu().numpy(),   # (L, M)
+            c["beta"].mean(0).float().cpu().numpy(),      # (L,)
+        ))
+
+        if self.current_epoch % _COEFF_CHART_EVERY:
+            return
+        try:
+            import wandb
+        except ImportError:
+            return
+        if not isinstance(self.logger, WandbLogger):
+            return
+
+        L, M = self._coeff_hist[0][0].shape
+        panels = {}
         for k in range(L):
-            for name in ("alpha_A", "alpha_D", "alpha_I"):
-                a_k = c[name][:, k]                          # (B, M) — this hop, all slots
-                for j in range(a_k.size(-1)):
-                    self.log(f"coeff/step{k:02d}/{name}_j{j}", a_k[:, j].mean(), batch_size=1)
-            self.log(f"coeff/step{k:02d}/beta", c["beta"][:, k].mean(), batch_size=1)
+            ys, keys = [], []
+            for label, slot in (("α_A", 0), ("α_D", 1), ("α_I", 2)):
+                for j in range(M):
+                    ys.append([float(h[slot][k, j]) for h in self._coeff_hist])
+                    keys.append(f"{label}[{j}]")
+            ys.append([float(h[3][k]) for h in self._coeff_hist])
+            keys.append("β")
+            panels[f"coeff/step{k:02d}"] = wandb.plot.line_series(
+                xs=self._coeff_epochs, ys=ys, keys=keys,
+                title=f"hop k={k}", xname="epoch",
+            )
+        self.logger.experiment.log(panels)
 
     def forward(self, data):
         return self.model(data)
