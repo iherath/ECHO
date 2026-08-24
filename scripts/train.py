@@ -79,7 +79,8 @@ parser.add_argument("--seed", type=int, default=1, help="Random seed for reprodu
 
 # GenLGSM parameters
 parser.add_argument("--glgsm_mode", type=str, default="option1",
-                    help="Hop mode: option1/option2/path_b (learnable) or lgsm_adj/lgsm_nbt (paper Seq) or hyper")
+                    help="Hop mode: option1/option2/path_b (learnable), lgsm_adj/lgsm_nbt/cheb "
+                         "(fixed propagation, no hypernetwork), or hyper")
 parser.add_argument("--window_size", type=int, default=2,
                     help="Memory depth M for GenLGSM 'hyper' mode (M=2 suffices to recover NBT recurrence)")
 parser.add_argument("--hyper_hidden_dim", type=int, default=64,
