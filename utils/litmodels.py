@@ -70,9 +70,6 @@ class DiversityPlotCallback(L.Callback):
         print(f"[DiversityPlot] saved → {path}")
 
 
-# epochs between per-step coefficient chart uploads (each upload resends full history)
-_COEFF_CHART_EVERY = 10
-
 models_map = {
     "GNN": GNN,
     "ADGN": ADGN,
@@ -118,9 +115,6 @@ class LitGraphNN(L.LightningModule):
         self.timing_csv_file = None
         self.task = task
         self.scaling_factor = scaling_factor
-        self._coeff_epochs: list = []   # x-axis for the per-step coefficient charts
-        self._coeff_hist: list = []     # one (a_A, a_D, a_I, beta) tuple per recorded epoch
-
         self.model = models_map[gnn_type](
             input_dim=input_dim,
             output_dim=output_dim,
@@ -189,7 +183,7 @@ class LitGraphNN(L.LightningModule):
                 print(f"Error writing to timing CSV {self.timing_csv_file}: {e}")
             self._epoch_start_time = None
 
-        self._log_coeff_per_step()
+        self._log_coeff_heatmap()
 
     def _hyper_hop_layer(self):
         """GenLGSM's hop layer when running glgsm_mode=hyper, else None."""
@@ -198,73 +192,69 @@ class LitGraphNN(L.LightningModule):
         return hop if getattr(hop, "mode", None) == "hyper" else None
 
     def _log_hyper_coeffs(self, batch_size: int):
-        """Whole-model summary scalars for the hypernetwork's α/β, averaged over the epoch.
+        """Track only the coefficients Chebyshev propagation pins down, as epoch curves.
 
-        graph_std is the key diagnostic: the coefficients are only graph-conditioned if
-        the hypernetwork makes them differ between graphs, so a graph_std pinned at 0
-        means the MLP has learned nothing graph-specific.
+        U(k) = T_k(S)H requires, in the paper's 1-based notation, α_S^(1)[1] = 1 and then
+        α_S^(k)[1] = 2, α_I^(k)[2] = -1 for k >= 2, with every other coefficient zero.
+        Those map to α_A slot 0 and α_I slot 1 here, hop 0 versus hops >= 1.
         """
         hop = self._hyper_hop_layer()
         if hop is None or hop.last_coeffs is None:
             return
 
-        for name in ("alpha_A", "alpha_D", "alpha_I", "beta"):
-            a = hop.last_coeffs[name]                    # (B, L, M) — (B, L) for beta
-            self.log(f"coeff/{name}_mean", a.mean(),
-                     on_step=False, on_epoch=True, batch_size=batch_size)
-            self.log(f"coeff/{name}_absmax", a.abs().max(), reduce_fx="max",
-                     on_step=False, on_epoch=True, batch_size=batch_size)
-            if a.size(0) > 1:                            # std over dim 0 is NaN when B == 1
-                self.log(f"coeff/{name}_graph_std", a.std(dim=0).mean(),
-                         on_step=False, on_epoch=True, batch_size=batch_size)
+        a_A = hop.last_coeffs["alpha_A"]                 # (B, L, M)
+        a_D = hop.last_coeffs["alpha_D"]                 # (B, L, M)
+        a_I = hop.last_coeffs["alpha_I"]                 # (B, L, M)
+        log = lambda k, v, **kw: self.log(k, v, on_step=False, on_epoch=True,
+                                          batch_size=batch_size, **kw)
 
-    def _log_coeff_per_step(self):
-        """One wandb chart per sequence step, each holding all 3M+1 coefficient lines.
+        log("cheb/alpha_S_hop0", a_A[:, 0, 0].mean())          # target  1
+        log("cheb/alpha_S_hop1plus", a_A[:, 1:, 0].mean())     # target  2
+        log("cheb/alpha_I_hop1plus", a_I[:, 1:, 1].mean())     # target -1
 
-        wandb.plot.line_series builds a single multi-line panel, so hop k gets one tile
-        titled "hop k=..." with α_A[0..M-1], α_D[0..M-1], α_I[0..M-1] and β plotted
-        against epoch — rather than 3M+1 separate panels.
+        # Chebyshev sets everything else to zero — how far the model has drifted from it
+        rest = torch.cat([a_A[..., 1:].flatten(), a_D.flatten(),
+                          a_I[..., :1].flatten(), a_I[..., 2:].flatten()])
+        log("cheb/other_absmax", rest.abs().max(), reduce_fx="max")
 
-        History is recorded every epoch but uploaded every _COEFF_CHART_EVERY epochs,
-        because each upload resends the full series. Values are the epoch's last batch.
-        """
+        # the coefficients are only graph-conditioned if they differ between graphs;
+        # pinned at 0 means the hypernetwork has learned nothing graph-specific
+        if a_A.size(0) > 1:                              # std over dim 0 is NaN when B == 1
+            log("cheb/graph_std", torch.stack([
+                a_A.std(dim=0).mean(), a_D.std(dim=0).mean(), a_I.std(dim=0).mean(),
+            ]).mean())
+
+    def _log_coeff_heatmap(self):
+        """Once per epoch: the whole (L, 3M+1) coefficient map as a wandb image."""
         hop = self._hyper_hop_layer()
         if hop is None or hop.last_coeffs is None or not self.trainer.is_global_zero:
             return
-
-        c = hop.last_coeffs
-        self._coeff_epochs.append(self.current_epoch)
-        self._coeff_hist.append((
-            c["alpha_A"].mean(0).float().cpu().numpy(),   # (L, M)
-            c["alpha_D"].mean(0).float().cpu().numpy(),   # (L, M)
-            c["alpha_I"].mean(0).float().cpu().numpy(),   # (L, M)
-            c["beta"].mean(0).float().cpu().numpy(),      # (L,)
-        ))
-
-        if self.current_epoch % _COEFF_CHART_EVERY:
+        if not isinstance(self.logger, WandbLogger):
             return
         try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
             import wandb
         except ImportError:
             return
-        if not isinstance(self.logger, WandbLogger):
-            return
 
-        L, M = self._coeff_hist[0][0].shape
-        panels = {}
-        for k in range(L):
-            ys, keys = [], []
-            for label, slot in (("α_A", 0), ("α_D", 1), ("α_I", 2)):
-                for j in range(M):
-                    ys.append([float(h[slot][k, j]) for h in self._coeff_hist])
-                    keys.append(f"{label}[{j}]")
-            ys.append([float(h[3][k]) for h in self._coeff_hist])
-            keys.append("β")
-            panels[f"coeff/step{k:02d}"] = wandb.plot.line_series(
-                xs=self._coeff_epochs, ys=ys, keys=keys,
-                title=f"hop k={k}", xname="epoch",
-            )
-        self.logger.experiment.log(panels)
+        c = hop.last_coeffs
+        grid = torch.cat([                                # (L, 3M+1), mean over batch
+            c["alpha_A"].mean(0), c["alpha_D"].mean(0),
+            c["alpha_I"].mean(0), c["beta"].mean(0).unsqueeze(-1),
+        ], dim=-1).float().cpu().numpy()
+
+        lim = max(abs(grid).max(), 1e-8)                  # symmetric colour range around 0
+        fig, ax = plt.subplots(figsize=(6, 4))
+        im = ax.imshow(grid, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
+        ax.set_xlabel("\u03b1_A | \u03b1_D | \u03b1_I | \u03b2")
+        ax.set_ylabel("hop k")
+        ax.set_title(f"hypernetwork coefficients \u2014 epoch {self.current_epoch}")
+        fig.colorbar(im, ax=ax)
+        fig.tight_layout()
+        self.logger.experiment.log({"coeff/heatmap": wandb.Image(fig)})
+        plt.close(fig)
 
     def forward(self, data):
         return self.model(data)
