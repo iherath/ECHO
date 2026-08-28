@@ -7,6 +7,7 @@ kwargs:
     num_steps        : sequence length L (default 40)
     window_size      : memory depth M for 'hyper' mode (default 2)
     hyper_hidden_dim : hypernetwork MLP hidden dim for 'hyper' mode (default 64)
+    ablation         : one 'hyper' ablation per run: none | no_gate | no_hyper | no_pool_nbr
     batched          : use padded-batch vectorized layers (default False)
 """
 
@@ -41,6 +42,7 @@ class GenLGSM(nn.Module):
         hyper_hidden_dim = kwargs.get('hyper_hidden_dim', 64)
         hyper_init       = kwargs.get('hyper_init', 'gcn')
         hyper_init_noise = kwargs.get('hyper_init_noise', 0.0)
+        ablation         = kwargs.get('ablation', 'none')
         batched          = kwargs.get('batched', False)
 
         self.model = GenLGSMModel(
@@ -57,6 +59,7 @@ class GenLGSM(nn.Module):
             hyper_hidden_dim=hyper_hidden_dim,
             hyper_init=hyper_init,
             hyper_init_noise=hyper_init_noise,
+            ablation=ablation,
             batched=batched,
         )
 

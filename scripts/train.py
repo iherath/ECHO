@@ -93,6 +93,12 @@ parser.add_argument("--hyper_init_noise", type=float, default=0.0,
                          "hyper_init prior; 0.0 = exact init. Beta is left unperturbed.")
 parser.add_argument("--batched", action="store_true",
                     help="Use padded-batch vectorized layers for GenLGSM (8-15x faster)")
+parser.add_argument("--ablation", type=str, default="none",
+                    choices=["none", "no_gate", "no_hyper", "no_pool_nbr"],
+                    help="Architecture ablation for 'hyper' mode, one per run: no_gate (beta=0, "
+                         "no feature-attention track), no_hyper (alpha/beta frozen at the "
+                         "hyper_init prior, no hypernetwork), no_pool_nbr (graph summary pools X "
+                         "instead of [X | D^-1 A X])")
 
 # LRIM (Long-Range Ising Model) benchmark: --task lrim selects the HF file below
 parser.add_argument("--lrim_name", type=str, default="lrim_16_0.6_10k",
@@ -198,17 +204,23 @@ def train(seed, config):
             hyper_tag += f"-{config.hyper_init}"
         if config.hyper_init_noise > 0.0:
             hyper_tag += f"-noise{config.hyper_init_noise:g}"
+        if config.ablation != "none":
+            hyper_tag += f"-{config.ablation}"
     run_name = (
         f"{task}-{config.gnn_type}{mode_tag}-layers{config.num_layers}"
         f"-steps{config.num_steps}{hyper_tag}-seed{config.seed}"
     )
+    # Ablation runs share task+seed, so the suffix keeps their logs and checkpoints
+    # apart; it is empty for ablation=none, leaving existing run paths unchanged.
+    ablation_tag = f"_{config.ablation}" if config.ablation != "none" else ""
     logger = (
         WandbLogger(project="ECHO-GSSM", name=run_name)
         if config.wandb
-        else CSVLogger(save_dir=".", name="lightning_logs", version=f"{task}_{config.seed}")
+        else CSVLogger(save_dir=".", name="lightning_logs",
+                       version=f"{task}_{config.seed}{ablation_tag}")
     )
     # per-(task,seed) checkpoint dir + save_last so a re-submitted job can resume from last.ckpt
-    ckpt_dir = f"./checkpoints/{task}_seed{config.seed}"
+    ckpt_dir = f"./checkpoints/{task}_seed{config.seed}{ablation_tag}"
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=config.es_patience),
         ModelCheckpoint(dirpath=ckpt_dir, monitor="val_loss", save_top_k=1, save_last=True),
